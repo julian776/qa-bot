@@ -55,7 +55,8 @@ qa-bot/
 2. **Start the application**:
 
    ```bash
-   docker-compose up --build
+   make setup
+   make restart
    ```
 
 3. **Access the application**:
