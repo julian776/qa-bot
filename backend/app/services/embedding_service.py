@@ -1,37 +1,41 @@
 """
-Embedding service for generating and managing document embeddings using Hugging Face API
+Embedding service for generating and managing document embeddings using OpenAI API
 """
 import numpy as np
-import requests
+import openai
 import os
 from typing import List, Tuple
 import logging
+import asyncio
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
 class EmbeddingService:
-    """Service for generating embeddings using Hugging Face API"""
+    """Service for generating embeddings using OpenAI API"""
     
-    def __init__(self, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "text-embedding-3-small"):
         """
         Initialize the embedding service
         
         Args:
-            model_name: Name of the Hugging Face model to use
+            model_name: Name of the OpenAI embedding model to use
         """
         self.model_name = model_name
-        self.api_key = os.getenv("HUGGINGFACE_API_KEY")
-        self.api_url = f"https://api-inference.huggingface.co/models/{model_name}"
-        self.embedding_dim = 384  # all-MiniLM-L6-v2 has 384 dimensions
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.embedding_dim = 1536  # text-embedding-3-small has 1536 dimensions
         
         if not self.api_key:
-            raise ValueError("HUGGINGFACE_API_KEY environment variable is required")
+            raise ValueError("OPENAI_API_KEY environment variable is required")
+        
+        # Initialize OpenAI client
+        self.client = AsyncOpenAI(api_key=self.api_key)
         
         logger.info(f"Initialized embedding service with model: {model_name}")
     
-    def generate_embeddings(self, texts: List[str]) -> np.ndarray:
+    async def generate_embeddings(self, texts: List[str]) -> np.ndarray:
         """
-        Generate embeddings for a list of texts using Hugging Face API
+        Generate embeddings for a list of texts using OpenAI API
         
         Args:
             texts: List of text strings to embed
@@ -43,49 +47,24 @@ class EmbeddingService:
             if not texts:
                 return np.array([])
             
-            logger.info(f"Generating embeddings for {len(texts)} texts using Hugging Face API")
+            logger.info(f"Generating embeddings for {len(texts)} texts using OpenAI API")
             
-            # Prepare headers
-            headers = {
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json"
-            }
+            # Process texts in batches to avoid rate limits
+            batch_size = 100  # OpenAI allows up to 2048 inputs per request
+            all_embeddings = []
             
-            # Prepare payload
-            payload = {
-                "inputs": texts,
-                "options": {
-                    "wait_for_model": True,
-                    "use_cache": True
-                }
-            }
+            for i in range(0, len(texts), batch_size):
+                batch_texts = texts[i:i + batch_size]
+                
+                response = await self.client.embeddings.create(
+                    model=self.model_name,
+                    input=batch_texts
+                )
+                
+                batch_embeddings = [data.embedding for data in response.data]
+                all_embeddings.extend(batch_embeddings)
             
-            # Make API request
-            response = requests.post(
-                self.api_url,
-                headers=headers,
-                json=payload,
-                timeout=30
-            )
-            
-            if response.status_code != 200:
-                logger.error(f"API request failed with status {response.status_code}: {response.text}")
-                raise Exception(f"API request failed: {response.text}")
-            
-            # Parse response
-            embeddings = response.json()
-            
-            # Convert to numpy array
-            if isinstance(embeddings, list) and len(embeddings) > 0:
-                if isinstance(embeddings[0], list):
-                    # Multiple embeddings
-                    embeddings_array = np.array(embeddings, dtype=np.float32)
-                else:
-                    # Single embedding
-                    embeddings_array = np.array([embeddings], dtype=np.float32)
-            else:
-                raise Exception("Invalid response format from API")
-            
+            embeddings_array = np.array(all_embeddings, dtype=np.float32)
             logger.info(f"Generated embeddings with shape: {embeddings_array.shape}")
             return embeddings_array
             
@@ -93,7 +72,7 @@ class EmbeddingService:
             logger.error(f"Failed to generate embeddings: {e}")
             raise
     
-    def generate_single_embedding(self, text: str) -> np.ndarray:
+    async def generate_single_embedding(self, text: str) -> np.ndarray:
         """
         Generate embedding for a single text
         
@@ -103,7 +82,8 @@ class EmbeddingService:
         Returns:
             numpy array of embedding with shape (embedding_dim,)
         """
-        return self.generate_embeddings([text])[0]
+        embeddings = await self.generate_embeddings([text])
+        return embeddings[0]
     
     def get_embedding_dimension(self) -> int:
         """Get the dimension of embeddings produced by this model"""
@@ -130,3 +110,17 @@ class EmbeddingService:
         # Compute cosine similarity
         similarity = np.dot(embedding1, embedding2) / (norm1 * norm2)
         return float(similarity)
+    
+    async def test_connection(self) -> bool:
+        """
+        Test the OpenAI API connection
+        
+        Returns:
+            True if connection is successful, False otherwise
+        """
+        try:
+            test_embedding = await self.generate_single_embedding("test")
+            return len(test_embedding) == self.embedding_dim
+        except Exception as e:
+            logger.error(f"OpenAI API connection test failed: {e}")
+            return False

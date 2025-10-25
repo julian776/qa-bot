@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # QA Bot Setup Script
-# This script helps you set up the QA Bot with PostgreSQL and Hugging Face API
+# This script helps you set up the QA Bot with MongoDB, Qdrant, and OpenAI API
 
 set -e
 
@@ -14,27 +14,28 @@ if [ ! -f ".env" ]; then
     cp env.template .env
     echo "✅ .env file created!"
     echo ""
-    echo "⚠️  IMPORTANT: Please edit the .env file and add your Hugging Face API key:"
-    echo "   1. Go to https://huggingface.co/settings/tokens"
-    echo "   2. Create a new token"
-    echo "   3. Copy the token and paste it in .env file replacing 'your_huggingface_api_key_here'"
+    echo "⚠️  IMPORTANT: Please edit the .env file and add your OpenAI API key:"
+    echo "   1. Go to https://platform.openai.com/api-keys"
+    echo "   2. Create a new API key"
+    echo "   3. Copy the key and paste it in .env file replacing 'your_openai_api_key_here'"
     echo ""
     echo "Press Enter when you've added your API key..."
     read
 fi
 
 # Check if API key is set
-if grep -q "your_huggingface_api_key_here" .env; then
-    echo "❌ Please add your Hugging Face API key to the .env file first!"
-    echo "   Edit .env and replace 'your_huggingface_api_key_here' with your actual API key"
+if grep -q "your_openai_api_key_here" .env; then
+    echo "❌ Please add your OpenAI API key to the .env file first!"
+    echo "   Edit .env and replace 'your_openai_api_key_here' with your actual API key"
     exit 1
 fi
 
 echo "🔧 Building and starting services..."
 echo "   This will:"
 echo "   - Build the backend and frontend containers"
-echo "   - Start PostgreSQL database"
-echo "   - Initialize database tables"
+echo "   - Start MongoDB database"
+echo "   - Start Qdrant vector database"
+echo "   - Initialize database collections"
 echo "   - Start the QA Bot application"
 echo ""
 
@@ -43,16 +44,23 @@ docker-compose up --build -d
 
 echo ""
 echo "⏳ Waiting for services to be ready..."
-sleep 10
+sleep 15
 
 # Check if services are running
 echo "🔍 Checking service health..."
 
-# Check PostgreSQL
-if docker-compose exec -T postgres pg_isready -U qa_bot_user -d qa_bot > /dev/null 2>&1; then
-    echo "✅ PostgreSQL is ready"
+# Check MongoDB
+if docker-compose exec -T mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+    echo "✅ MongoDB is ready"
 else
-    echo "❌ PostgreSQL is not ready"
+    echo "❌ MongoDB is not ready"
+fi
+
+# Check Qdrant
+if curl -f http://localhost:6333/health > /dev/null 2>&1; then
+    echo "✅ Qdrant is ready"
+else
+    echo "❌ Qdrant is not ready"
 fi
 
 # Check backend
@@ -78,10 +86,13 @@ echo "   Backend API: http://localhost:8000"
 echo "   API Docs: http://localhost:8000/docs"
 echo ""
 echo "📊 Database Info:"
-echo "   Host: localhost:5432"
+echo "   MongoDB: localhost:27017"
 echo "   Database: qa_bot"
-echo "   Username: qa_bot_user"
-echo "   Password: qa_bot_password"
+echo "   Username: admin"
+echo "   Password: password123"
+echo ""
+echo "   Qdrant: http://localhost:6333"
+echo "   Collection: qa_bot_embeddings"
 echo ""
 echo "🛠️  Useful commands:"
 echo "   View logs: docker-compose logs -f"
@@ -89,7 +100,11 @@ echo "   Stop services: docker-compose down"
 echo "   Restart services: docker-compose restart"
 echo "   Rebuild: docker-compose up --build"
 echo ""
+echo "🧪 Test the system:"
+echo "   python scripts/test_qa_bot.py"
+echo ""
 echo "📚 Next steps:"
 echo "   1. Upload some documents via the web interface"
 echo "   2. Ask questions about your documents"
 echo "   3. Check the API documentation at http://localhost:8000/docs"
+echo "   4. Run the test script to verify everything works"

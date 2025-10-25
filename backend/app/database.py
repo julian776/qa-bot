@@ -1,59 +1,69 @@
 """
-Database configuration and connection setup
+MongoDB database configuration and connection setup
 """
 import os
-from sqlalchemy import create_engine, MetaData
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.dialects.postgresql import UUID
+from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import MongoClient
+from typing import Optional
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Get database URL from environment variable
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://qa_bot_user:qa_bot_password@localhost:5432/qa_bot")
-
-# Create SQLAlchemy engine
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,  # Set to True for SQL query logging
-    pool_pre_ping=True,  # Verify connections before use
-    pool_recycle=300,    # Recycle connections every 5 minutes
-)
-
-# Create SessionLocal class
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
-# Create Base class for models
-Base = declarative_base()
-
-# Metadata for table creation
-metadata = MetaData()
-
-def get_db():
-    """Dependency to get database session"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-def create_tables():
-    """Create all tables in the database"""
-    try:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables created successfully")
-    except Exception as e:
-        logger.error(f"Failed to create database tables: {e}")
-        raise
-
-def test_connection():
-    """Test database connection"""
-    try:
-        with engine.connect() as connection:
-            result = connection.execute("SELECT 1")
-            logger.info("Database connection successful")
+class DatabaseConfig:
+    """Database configuration class"""
+    
+    def __init__(self):
+        self.mongodb_url = os.getenv("MONGODB_URL", "mongodb://admin:password123@localhost:27017/qa_bot?authSource=admin")
+        self.database_name = "qa_bot"
+        self.client: Optional[AsyncIOMotorClient] = None
+        self.database = None
+    
+    async def connect(self):
+        """Connect to MongoDB"""
+        try:
+            self.client = AsyncIOMotorClient(self.mongodb_url)
+            self.database = self.client[self.database_name]
+            
+            # Test connection
+            await self.client.admin.command('ping')
+            logger.info("Connected to MongoDB successfully")
             return True
-    except Exception as e:
-        logger.error(f"Database connection failed: {e}")
-        return False
+        except Exception as e:
+            logger.error(f"Failed to connect to MongoDB: {e}")
+            return False
+    
+    async def disconnect(self):
+        """Disconnect from MongoDB"""
+        if self.client:
+            self.client.close()
+            logger.info("Disconnected from MongoDB")
+    
+    async def get_collection(self, collection_name: str):
+        """Get a collection from the database"""
+        if not self.database:
+            await self.connect()
+        return self.database[collection_name]
+
+# Global database instance
+db_config = DatabaseConfig()
+
+async def get_database():
+    """Get database instance"""
+    if not db_config.database:
+        await db_config.connect()
+    return db_config.database
+
+async def get_collection(collection_name: str):
+    """Get a specific collection"""
+    return await db_config.get_collection(collection_name)
+
+# Synchronous client for migration scripts
+def get_sync_client():
+    """Get synchronous MongoDB client for migration scripts"""
+    mongodb_url = os.getenv("MONGODB_URL", "mongodb://admin:password123@localhost:27017/qa_bot?authSource=admin")
+    return MongoClient(mongodb_url)
+
+def get_sync_database():
+    """Get synchronous database instance"""
+    client = get_sync_client()
+    return client["qa_bot"]
