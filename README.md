@@ -1,6 +1,6 @@
-# QA Bot - Full-Stack Application with Local Embeddings Database
+# QA Bot - Full-Stack Application with PostgreSQL and Hugging Face Embeddings
 
-A comprehensive full-stack Q&A application built with FastAPI (backend) and React with TypeScript (frontend), featuring a local vector embeddings database for semantic search and document retrieval.
+A comprehensive full-stack Q&A application built with FastAPI (backend) and React with TypeScript (frontend), featuring PostgreSQL database with vector operations and Hugging Face embeddings API for semantic search and document retrieval.
 
 ## Project Structure
 
@@ -66,15 +66,18 @@ qa-bot/
 
 - **Document Upload**: Support for .txt and .pdf files
 - **Text Chunking**: Automatic document splitting with configurable size and overlap
-- **Vector Embeddings**: Generate embeddings using sentence transformers
-- **Local Vector Database**: FAISS-based storage for efficient similarity search
+- **Vector Embeddings**: Generate embeddings using Hugging Face API (all-MiniLM-L6-v2)
+- **PostgreSQL Database**: Real database with vector operations for efficient similarity search
 - **Semantic Search**: Query documents using natural language
 - **User Management**: User-specific document isolation
+- **Query Logging**: Track and analyze user queries
 
 ### Technical Features
 
 - **Backend**: FastAPI with auto-reload support
 - **Frontend**: React with TypeScript and hot-reloading
+- **Database**: PostgreSQL with vector similarity operations
+- **Embeddings**: Hugging Face API integration
 - **Docker**: Fully containerized development environment
 - **CORS**: Configured for cross-origin requests
 - **Type Safety**: Full TypeScript support in frontend
@@ -83,23 +86,56 @@ qa-bot/
 
 ## Quick Start
 
-1. **Clone and navigate to the project**:
+### Prerequisites
+
+- Docker and Docker Compose installed
+- Hugging Face account and API key
+
+### Setup Instructions
+
+1. **Get your Hugging Face API key**:
+
+   - Go to [https://huggingface.co/settings/tokens](https://huggingface.co/settings/tokens)
+   - Create a new token
+   - Copy the token
+
+2. **Run the setup script**:
 
    ```bash
-   cd qa-bot
+   ./setup.sh
    ```
 
-2. **Start the application**:
+   The script will:
 
-   ```bash
-   make setup
-   make restart
-   ```
+   - Create a `.env` file from the template
+   - Prompt you to add your Hugging Face API key
+   - Build and start all services
+   - Initialize the PostgreSQL database
+   - Verify all services are running
 
 3. **Access the application**:
    - Frontend: http://localhost:3000
    - Backend API: http://localhost:8000
    - API Documentation: http://localhost:8000/docs
+
+### Manual Setup (Alternative)
+
+If you prefer manual setup:
+
+1. **Create environment file**:
+
+   ```bash
+   cp env.template .env
+   ```
+
+2. **Edit `.env` file**:
+
+   - Replace `your_huggingface_api_key_here` with your actual Hugging Face API key
+
+3. **Start services**:
+   ```bash
+   docker-compose up --build -d
+   ```
 
 ## Development
 
@@ -223,15 +259,26 @@ make help
 
 ### Environment Variables
 
+- `HUGGINGFACE_API_KEY` - Your Hugging Face API key (required)
+- `DATABASE_URL` - PostgreSQL connection string (auto-configured)
 - `PYTHONPATH=/app` - Python path for the backend
 - `PYTHONUNBUFFERED=1` - Unbuffered Python output
 - `CHOKIDAR_USEPOLLING=true` - File watching for frontend
 - `REACT_APP_API_URL=http://localhost:8000` - API URL for frontend
 
-### Vector Database Configuration
+### Database Configuration
 
-- **Storage**: FAISS index stored in `/app/data/vector_store/`
-- **Embedding Model**: `all-MiniLM-L6-v2` (384 dimensions)
+- **Database**: PostgreSQL 15
+- **Host**: localhost:5432 (or postgres:5432 in Docker)
+- **Database Name**: qa_bot
+- **Username**: qa_bot_user
+- **Password**: qa_bot_password
+- **Vector Operations**: Uses PostgreSQL's built-in vector similarity operators
+
+### Embedding Configuration
+
+- **Model**: `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions)
+- **API**: Hugging Face Inference API
 - **Chunk Size**: 500 tokens (configurable)
 - **Chunk Overlap**: 50 tokens (configurable)
 
@@ -239,42 +286,78 @@ make help
 
 ### Backend Services
 
-1. **EmbeddingService**: Generates embeddings using sentence transformers
-2. **VectorStore**: Manages FAISS index and metadata storage
+1. **EmbeddingService**: Generates embeddings using Hugging Face API
+2. **VectorStore**: Manages PostgreSQL database with vector operations
 3. **DocumentProcessor**: Handles file uploads and text chunking
-4. **FastAPI Router**: Exposes RESTful endpoints
+4. **Database Models**: SQLAlchemy models for data persistence
+5. **FastAPI Router**: Exposes RESTful endpoints
 
 ### Data Flow
 
-1. **Upload**: File → Text Extraction → Chunking → Embedding → FAISS Storage
-2. **Query**: Text → Embedding → FAISS Search → Similarity Ranking → Results
+1. **Upload**: File → Text Extraction → Chunking → Embedding (HF API) → PostgreSQL Storage
+2. **Query**: Text → Embedding (HF API) → PostgreSQL Vector Search → Similarity Ranking → Results
 
-### Storage Structure
+### Database Schema
 
-```
-data/vector_store/
-├── faiss_index.bin    # FAISS vector index
-└── metadata.pkl       # Document metadata
+```sql
+-- Document chunks table
+CREATE TABLE document_chunks (
+    id UUID PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    document_name VARCHAR(500) NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    text_chunk TEXT NOT NULL,
+    chunk_size INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    metadata JSON
+);
+
+-- Embeddings table
+CREATE TABLE embeddings (
+    id UUID PRIMARY KEY,
+    chunk_id UUID NOT NULL,
+    user_id VARCHAR(255) NOT NULL,
+    document_name VARCHAR(500) NOT NULL,
+    embedding_vector FLOAT[] NOT NULL,  -- PostgreSQL array
+    embedding_dimension INTEGER NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Query logs table
+CREATE TABLE query_logs (
+    id UUID PRIMARY KEY,
+    user_id VARCHAR(255) NOT NULL,
+    query_text TEXT NOT NULL,
+    query_embedding FLOAT[],
+    results_count INTEGER DEFAULT 0,
+    processing_time FLOAT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
 ```
 
 ## Troubleshooting
 
 ### Common Issues
 
-1. **Port conflicts**: Ensure ports 3000 and 8000 are available
-2. **Memory issues**: FAISS and sentence transformers require sufficient RAM
-3. **File permissions**: Check Docker volume permissions
-4. **Model download**: First run may take time to download embedding model
+1. **Missing API Key**: Ensure `HUGGINGFACE_API_KEY` is set in your `.env` file
+2. **Database Connection**: Check if PostgreSQL container is running and healthy
+3. **Port conflicts**: Ensure ports 3000, 8000, and 5432 are available
+4. **API Rate Limits**: Hugging Face API has rate limits; consider upgrading if needed
+5. **Memory issues**: PostgreSQL and embeddings require sufficient RAM
 
 ### Debugging
 
 ```bash
 # Check service logs
-make logs-backend
-make logs-frontend
+docker-compose logs -f backend
+docker-compose logs -f postgres
+docker-compose logs -f frontend
 
 # Check service health
 curl http://localhost:8000/health
+
+# Check database connection
+docker-compose exec postgres psql -U qa_bot_user -d qa_bot -c "SELECT 1;"
 
 # Check system stats
 curl http://localhost:8000/stats
@@ -282,9 +365,11 @@ curl http://localhost:8000/stats
 
 ## Performance Considerations
 
-- **Embedding Model**: `all-MiniLM-L6-v2` balances speed and quality
+- **Embedding Model**: `all-MiniLM-L6-v2` balances speed and quality (384 dimensions)
 - **Chunk Size**: 500 tokens provides good context while maintaining performance
-- **FAISS Index**: Uses IndexFlatIP for exact similarity search
+- **PostgreSQL Vector Operations**: Uses native vector similarity operators for efficiency
+- **API Calls**: Hugging Face API handles model loading and caching
+- **Database Indexing**: Proper indexes on user_id, document_name, and embedding vectors
 - **Memory Usage**: Each embedding is 384 dimensions (float32)
 
 ## Security Notes
@@ -297,11 +382,13 @@ curl http://localhost:8000/stats
 ## Next Steps
 
 - Add user authentication and authorization
-- Implement database persistence for metadata
-- Add support for more file types (docx, html, etc.)
-- Implement advanced chunking strategies
-- Add embedding model fine-tuning capabilities
-- Deploy to production with proper scaling
+- Implement advanced chunking strategies (semantic chunking)
+- Add support for more file types (docx, html, markdown, etc.)
+- Implement embedding model fine-tuning capabilities
+- Add query analytics and insights dashboard
+- Implement document versioning and updates
+- Add batch processing for large document collections
+- Deploy to production with proper scaling and monitoring
 
 ## Stopping the Application
 
@@ -309,15 +396,11 @@ curl http://localhost:8000/stats
 docker-compose down
 ```
 
-## Troubleshooting
+## Support
 
-1. **Port conflicts**: Ensure ports 3000 and 8000 are available
-2. **Permission issues**: On Linux/macOS, you might need to adjust file permissions
-3. **Node modules**: If frontend issues occur, try rebuilding: `docker-compose up --build --force-recreate frontend`
+For issues and questions:
 
-## Next Steps
-
-- Add a database (PostgreSQL, MongoDB, etc.)
-- Implement user authentication
-- Add more sophisticated Q&A features
-- Deploy to production (Docker Swarm, Kubernetes, etc.)
+1. Check the troubleshooting section above
+2. Review the logs: `docker-compose logs -f`
+3. Verify your Hugging Face API key is valid
+4. Ensure all required ports are available

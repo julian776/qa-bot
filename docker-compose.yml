@@ -1,16 +1,39 @@
 version: "3.8"
 
 services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=qa_bot
+      - POSTGRES_USER=qa_bot_user
+      - POSTGRES_PASSWORD=qa_bot_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - qa-bot-network
+    restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U qa_bot_user -d qa_bot" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - vector_data:/app/data/vector_store
     environment:
       - PYTHONPATH=/app
       - PYTHONUNBUFFERED=1
+      - DATABASE_URL=postgresql://qa_bot_user:qa_bot_password@postgres:5432/qa_bot
+      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - qa-bot-network
     restart: unless-stopped
@@ -39,7 +62,7 @@ services:
     restart: unless-stopped
 
 volumes:
-  vector_data:
+  postgres_data:
     driver: local
 
 networks:

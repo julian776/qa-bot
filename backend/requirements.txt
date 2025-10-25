@@ -4,6 +4,11 @@ uvicorn[standard]==0.37.0
 pydantic==2.11.9
 python-multipart==0.0.20
 
+# Database dependencies
+sqlalchemy==2.0.23
+psycopg2-binary==2.9.9
+alembic==1.13.1
+
 # Vector database and embeddings
 faiss-cpu==1.7.4
 numpy==1.24.3

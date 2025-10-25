@@ -13,9 +13,6 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create data directory for vector store
-RUN mkdir -p /app/data/vector_store
-
 # Copy application code
 COPY . .
 

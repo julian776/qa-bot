@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import api, documents
 from app.services.embedding_service import EmbeddingService
 from app.services.vector_store import VectorStore
+from app.database import create_tables, test_connection
 import logging
 
 # Configure logging
@@ -10,9 +11,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="QA Bot API with Embeddings Database",
+    title="QA Bot API with PostgreSQL Database",
     version="1.0.0",
-    description="A full-stack Q&A application with local vector embeddings database"
+    description="A full-stack Q&A application with PostgreSQL database and Hugging Face embeddings"
 )
 
 # Configure CORS
@@ -25,8 +26,23 @@ app.add_middleware(
 )
 
 # Initialize services
-embedding_service = EmbeddingService()
-vector_store = VectorStore()
+try:
+    # Test database connection first
+    if not test_connection():
+        raise Exception("Database connection failed")
+    
+    # Create database tables
+    create_tables()
+    
+    # Initialize services
+    embedding_service = EmbeddingService()
+    vector_store = VectorStore()
+    
+    logger.info("Services initialized successfully")
+    
+except Exception as e:
+    logger.error(f"Failed to initialize services: {e}")
+    raise
 
 # Make services available to routers
 app.embedding_service = embedding_service
@@ -39,11 +55,12 @@ app.include_router(documents.router, prefix="/api")
 @app.get("/")
 async def root():
     return {
-        "message": "QA Bot API with Embeddings Database is running!",
+        "message": "QA Bot API with PostgreSQL Database is running!",
         "version": "1.0.0",
         "features": [
             "Document upload and processing",
-            "Vector embeddings with FAISS",
+            "PostgreSQL database with vector operations",
+            "Hugging Face embeddings API",
             "Semantic search",
             "Q&A functionality"
         ]
