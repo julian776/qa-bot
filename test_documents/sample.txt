@@ -1,0 +1,29 @@
+QA Bot - Full-Stack Application with Embeddings Database
+
+This is a comprehensive full-stack application that demonstrates the integration of FastAPI backend with React frontend, enhanced with a local vector embeddings database.
+
+Key Features:
+- Document upload and processing (supports .txt and .pdf files)
+- Automatic text chunking with configurable size and overlap
+- Vector embeddings generation using sentence transformers
+- Local FAISS vector database for efficient similarity search
+- Semantic search capabilities
+- User-specific document management
+- RESTful API with comprehensive documentation
+
+Technical Stack:
+- Backend: FastAPI with Python 3.11
+- Frontend: React with TypeScript
+- Vector Database: FAISS (Facebook AI Similarity Search)
+- Embeddings: Sentence Transformers (all-MiniLM-L6-v2)
+- Containerization: Docker and Docker Compose
+- File Processing: PyPDF2 for PDFs, tiktoken for text chunking
+
+The system processes documents by:
+1. Reading file content (text or PDF)
+2. Splitting into overlapping chunks (500 tokens by default)
+3. Generating embeddings for each chunk
+4. Storing vectors and metadata in FAISS index
+5. Enabling semantic search across all user documents
+
+This architecture provides a solid foundation for building question-answering systems, document retrieval, and knowledge management applications.

@@ -7,11 +7,18 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - vector_data:/app/data/vector_store
     environment:
       - PYTHONPATH=/app
+      - PYTHONUNBUFFERED=1
     networks:
       - qa-bot-network
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build: ./frontend
@@ -23,11 +30,17 @@ services:
     environment:
       - CHOKIDAR_USEPOLLING=true
       - WATCHPACK_POLLING=true
+      - REACT_APP_API_URL=http://localhost:8000
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - qa-bot-network
     restart: unless-stopped
+
+volumes:
+  vector_data:
+    driver: local
 
 networks:
   qa-bot-network:

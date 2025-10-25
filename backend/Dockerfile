@@ -2,9 +2,19 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# Install system dependencies for PDF processing and magic file detection
+RUN apt-get update && apt-get install -y \
+    libmagic1 \
+    libmagic-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 # Copy requirements first for better caching
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create data directory for vector store
+RUN mkdir -p /app/data/vector_store
 
 # Copy application code
 COPY . .
@@ -13,4 +23,4 @@ COPY . .
 EXPOSE 8000
 
 # Run with auto-reload for development
-CMD ["fastapi", "dev", "app/main.py", "--host", "0.0.0.0"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
