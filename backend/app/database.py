@@ -38,6 +38,10 @@ class DatabaseConfig:
             self.client.close()
             logger.info("Disconnected from MongoDB")
     
+    def get_database(self):
+        """Get the database instance"""
+        return self.database
+
     async def get_collection(self, collection_name: str):
         """Get a collection from the database"""
         if not self.database:

@@ -79,16 +79,15 @@ class QdrantVectorStore:
             points = []
             for i, (embedding, chunk) in enumerate(zip(embeddings, chunks)):
                 point_id = str(uuid.uuid4())
-                
+
                 # Create payload with metadata
                 payload = {
-                    "chunk_id": str(chunk.id),
-                    "document_id": str(chunk.document_id),
+                    "chunk_id": point_id,  # Use the point_id as chunk_id
+                    "document_name": chunk.document_name,
                     "user_id": chunk.user_id,
                     "chunk_index": chunk.chunk_index,
                     "text_chunk": chunk.text_chunk,
                     "chunk_size": chunk.chunk_size,
-                    "token_count": chunk.token_count,
                     "created_at": chunk.created_at.isoformat(),
                     "metadata": chunk.metadata or {}
                 }
@@ -113,7 +112,7 @@ class QdrantVectorStore:
             raise
     
     async def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5,
-                   similarity_threshold: float = 0.7, language: Optional[str] = None) -> List[QueryResult]:
+                   similarity_threshold: float = 0.3, language: Optional[str] = None) -> List[QueryResult]:
         """
         Search for similar embeddings using Qdrant
 

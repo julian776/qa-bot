@@ -69,8 +69,8 @@ class VectorStore:
         finally:
             db.close()
     
-    def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5, 
-               similarity_threshold: float = 0.7) -> List[QueryResult]:
+    def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5,
+               similarity_threshold: float = 0.3) -> List[QueryResult]:
         """
         Search for similar embeddings using PostgreSQL vector operations
         

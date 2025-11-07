@@ -86,7 +86,7 @@ async def upload_document(
 
             # Generate embeddings for chunks
             texts = [chunk.text_chunk for chunk in chunks]
-            embeddings = embedding_service.generate_embeddings(texts)
+            embeddings = await embedding_service.generate_embeddings(texts)
 
             # Store embeddings and metadata in Qdrant
             await vector_store.add_embeddings(embeddings, chunks)
@@ -119,14 +119,14 @@ async def upload_document(
         logger.error(f"Error processing document {file.filename}: {e}")
         raise HTTPException(status_code=500, detail=f"Error processing document: {str(e)}")
 
-@router.post("/query", response_model=QueryResponse)
+@router.post("/query-documents", response_model=QueryResponse)
 async def query_documents(
     request: QueryRequest,
     embedding_service: EmbeddingService = Depends(get_embedding_service),
     vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
-    Query documents using semantic search
+    Query documents using semantic search (without LLM)
     
     Args:
         request: Query request with query text, user_id, and search parameters
@@ -143,10 +143,10 @@ async def query_documents(
             raise HTTPException(status_code=400, detail="Query cannot be empty")
         
         # Generate embedding for query
-        query_embedding = embedding_service.generate_single_embedding(request.query)
+        query_embedding = await embedding_service.generate_single_embedding(request.query)
         
         # Search for similar documents
-        results = vector_store.search(
+        results = await vector_store.search(
             query_embedding=query_embedding,
             user_id=request.user_id,
             top_k=request.top_k,
@@ -248,7 +248,7 @@ async def search_user_documents(
     user_id: str,
     query: str,
     top_k: int = 5,
-    similarity_threshold: float = 0.7,
+    similarity_threshold: float = 0.3,  # Lowered from 0.7 for better results
     embedding_service: EmbeddingService = Depends(get_embedding_service),
     vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):

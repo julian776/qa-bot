@@ -32,7 +32,7 @@ class QueryWithSessionRequest(BaseModel):
     session_id: str
     user_id: Optional[str] = "default_user"
     top_k: int = 5
-    similarity_threshold: float = 0.7
+    similarity_threshold: float = 0.3  # Lowered from 0.7 - OpenAI embeddings typically score 0.3-0.5 for relevant matches
     language: Optional[str] = None  # Optional language filter
 
 

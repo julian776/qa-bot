@@ -117,15 +117,16 @@ async def query_with_llm(
         logger.info(f"Query language: {language}")
 
         # Generate embedding for the prompt
-        query_embedding = embedding_service.generate_single_embedding(request.prompt)
+        query_embedding = await embedding_service.generate_single_embedding(request.prompt)
 
-        # Search for similar documents with language filter
+        # Search for similar documents WITHOUT language filter (allows cross-language search)
+        # This is important because embeddings can match semantically across languages
         search_results = await vector_store.search(
             query_embedding=query_embedding,
             user_id=request.user_id,
             top_k=request.top_k,
             similarity_threshold=request.similarity_threshold,
-            language=language
+            language=None  # Don't filter by language - allow cross-language semantic search
         )
 
         # Convert search results to dict format for LLM
