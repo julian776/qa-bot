@@ -13,6 +13,7 @@ export default function App() {
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [files, setFiles] = useState([]);
   const bottomRef = useRef(null);
@@ -29,7 +30,7 @@ export default function App() {
     api.listConversations().catch(() => {});
   }, []);
 
-  const canSend = useMemo(() => !sending, [sending]);
+  const canSend = useMemo(() => !sending && !uploading, [sending, uploading]);
 
   async function ensureConversation() {
     if (conversationId) return conversationId;
@@ -41,7 +42,7 @@ export default function App() {
     }
 
   async function handleSend(text) {
-    if (!text.trim() || !canSend) return;
+    if (!text.trim() || !canSend || uploading) return;
     setError(null);
     const id = await ensureConversation();
 
@@ -49,16 +50,31 @@ export default function App() {
     setMessages((prev) => [...prev, userMsg]);
     appendMessage(id, userMsg);
 
-    // (opcional) subida de archivos
-    try {
-      if (files.length) await api.uploadFiles(files);
-    } catch (e) {
-      console.warn("upload failed", e);
+    // Upload files first if any
+    if (files.length > 0) {
+      setUploading(true);
+      try {
+        await api.uploadFiles(files);
+        const uploadMsg = {
+          id: crypto.randomUUID(),
+          role: "system",
+          content: `✅ ${files.length} documento${files.length > 1 ? 's' : ''} procesado${files.length > 1 ? 's' : ''} correctamente`,
+          createdAt: Date.now()
+        };
+        setMessages((prev) => [...prev, uploadMsg]);
+      } catch (e) {
+        console.error("upload failed", e);
+        setError(`Error al subir archivos: ${e.message}`);
+        setUploading(false);
+        return;
+      } finally {
+        setUploading(false);
+      }
     }
 
     setSending(true);
     try {
-      const data = await api.send({ conversationId: id, message: userMsg.content, files });
+      const data = await api.send({ conversationId: id, message: userMsg.content, files: [] });
       const botMsg = { id: crypto.randomUUID(), role: "assistant", content: data.reply, createdAt: Date.now() };
       setMessages((prev) => [...prev, botMsg]);
       appendMessage(id, botMsg);
@@ -127,7 +143,7 @@ export default function App() {
         </div>
 
         <div className="messages" role="log" aria-live="polite">
-          <MessageList messages={messages} sending={sending} />
+          <MessageList messages={messages} sending={sending} uploading={uploading} />
           <div ref={bottomRef} />
         </div>
 
@@ -137,6 +153,7 @@ export default function App() {
             onSend={handleSend}
             files={files}
             setFiles={setFiles}
+            disabled={!canSend}
           />
         </div>
       </section>

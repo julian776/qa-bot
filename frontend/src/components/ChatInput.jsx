@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function ChatInput({ onSend, files, setFiles }) {
+export default function ChatInput({ onSend, files, setFiles, disabled = false }) {
   const [text, setText] = useState("");
 
   function onPickFiles(e) {
@@ -14,6 +14,7 @@ export default function ChatInput({ onSend, files, setFiles }) {
   }
 
   function send() {
+    if (disabled) return;
     onSend(text);
     if (text.trim()) setText("");
   }
@@ -35,13 +36,14 @@ export default function ChatInput({ onSend, files, setFiles }) {
 
       <textarea
         aria-label="Escribe tu mensaje"
-        placeholder="Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"
+        placeholder={disabled ? "Procesando..." : "Escribe un mensaje… (Enter para enviar, Shift+Enter para salto de línea)"}
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); send(); } }}
         rows={2}
+        disabled={disabled}
       />
-      <button className="btn primary" onClick={send} aria-label="Enviar">Enviar</button>
+      <button className="btn primary" onClick={send} aria-label="Enviar" disabled={disabled}>Enviar</button>
     </>
   );
 }

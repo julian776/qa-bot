@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import MessageBubble from "./MessageBubble.jsx";
 
-export default function MessageList({ messages, sending }) {
+export default function MessageList({ messages, sending, uploading }) {
   useEffect(() => {
     function onClick(e) {
       const btn = e.target.closest(".copy-btn");
@@ -28,7 +28,12 @@ export default function MessageList({ messages, sending }) {
       {messages.map((m) => (
         <MessageBubble key={m.id} msg={m} />
       ))}
-      {sending && (
+      {uploading && (
+        <div className="typing" aria-label="Procesando documentos">
+          📄 Procesando documentos<span className="dot" /><span className="dot" /><span className="dot" />
+        </div>
+      )}
+      {sending && !uploading && (
         <div className="typing" aria-label="Escribiendo">
           <span className="dot" /><span className="dot" /><span className="dot" />
         </div>
