@@ -1,8 +1,9 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import api, documents
+from app.routers import api, documents, sessions, admin
 from app.services.embedding_service import EmbeddingService
 from app.services.qdrant_store import QdrantVectorStore
+from app.services.llm_service import LLMService
 from app.database import db_config
 import logging
 
@@ -28,35 +29,41 @@ app.add_middleware(
 # Global service instances
 embedding_service = None
 vector_store = None
+llm_service = None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize services on startup"""
-    global embedding_service, vector_store
-    
+    global embedding_service, vector_store, llm_service
+
     try:
         # Connect to MongoDB
         if not await db_config.connect():
             raise Exception("MongoDB connection failed")
-        
+
         # Initialize services
         embedding_service = EmbeddingService()
         vector_store = QdrantVectorStore()
-        
+        llm_service = LLMService()
+
         # Test connections
         if not await embedding_service.test_connection():
             raise Exception("OpenAI API connection failed")
-        
+
         if not vector_store.test_connection():
             raise Exception("Qdrant connection failed")
-        
+
+        if not llm_service.test_connection():
+            raise Exception("LLM service connection failed")
+
         # Make services available to routers
         app.embedding_service = embedding_service
         app.vector_store = vector_store
+        app.llm_service = llm_service
         app.db_config = db_config
-        
+
         logger.info("All services initialized successfully")
-        
+
     except Exception as e:
         logger.error(f"Failed to initialize services: {e}")
         raise
@@ -68,21 +75,25 @@ async def shutdown_event():
         await db_config.disconnect()
 
 # Include routers
-app.include_router(api.router, prefix="/api")
-app.include_router(documents.router, prefix="/api")
+app.include_router(api.router, prefix="/api", tags=["legacy"])
+app.include_router(documents.router, prefix="/api", tags=["documents"])
+app.include_router(sessions.router, prefix="/api", tags=["sessions"])
+app.include_router(admin.router, prefix="/api", tags=["admin"])
 
 @app.get("/")
 async def root():
     return {
-        "message": "QA Bot API with MongoDB and Qdrant is running!",
-        "version": "2.0.0",
+        "message": "QA Bot API with MongoDB, Qdrant, and LLM is running!",
+        "version": "3.0.0",
         "features": [
-            "Document upload and processing",
-            "MongoDB for metadata storage",
+            "Document upload and processing (PDF/TXT)",
+            "Language detection (English/Spanish)",
+            "MongoDB for metadata and chat history",
             "Qdrant vector database for embeddings",
-            "OpenAI embeddings API",
-            "Semantic search",
-            "Q&A functionality"
+            "OpenAI embeddings and LLM",
+            "Semantic search with language filtering",
+            "Chat sessions with history",
+            "LLM-powered Q&A responses"
         ]
     }
 

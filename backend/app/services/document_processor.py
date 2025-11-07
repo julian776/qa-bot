@@ -10,16 +10,17 @@ from datetime import datetime
 import logging
 
 from app.models.document import DocumentChunk
+from app.services.language_detector import LanguageDetector
 
 logger = logging.getLogger(__name__)
 
 class DocumentProcessor:
     """Service for processing documents and creating chunks"""
-    
+
     def __init__(self, chunk_size: int = 500, chunk_overlap: int = 50):
         """
         Initialize the document processor
-        
+
         Args:
             chunk_size: Maximum number of tokens per chunk
             chunk_overlap: Number of tokens to overlap between chunks
@@ -27,29 +28,34 @@ class DocumentProcessor:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.encoding = tiktoken.get_encoding("cl100k_base")  # GPT-4 encoding
+        self.language_detector = LanguageDetector()
     
-    async def process_file(self, file_path: str, user_id: str, document_name: str) -> List[DocumentChunk]:
+    async def process_file(self, file_path: str, user_id: str, document_name: str) -> Tuple[List[DocumentChunk], str]:
         """
-        Process a file and return document chunks
-        
+        Process a file and return document chunks with detected language
+
         Args:
             file_path: Path to the uploaded file
             user_id: User ID who uploaded the file
             document_name: Name of the document
-            
+
         Returns:
-            List of DocumentChunk objects
+            Tuple of (List of DocumentChunk objects, detected language code)
         """
         try:
             # Read file content based on file type
             content = await self._read_file_content(file_path)
-            
+
+            # Detect language
+            language = self.language_detector.detect_language(content)
+            logger.info(f"Detected language: {language} for document {document_name}")
+
             # Create chunks
-            chunks = self._create_chunks(content, user_id, document_name)
-            
+            chunks = self._create_chunks(content, user_id, document_name, language)
+
             logger.info(f"Processed {document_name} into {len(chunks)} chunks for user {user_id}")
-            return chunks
-            
+            return chunks, language
+
         except Exception as e:
             logger.error(f"Failed to process file {file_path}: {e}")
             raise
@@ -99,21 +105,22 @@ class DocumentProcessor:
             logger.error(f"Failed to read PDF file {file_path}: {e}")
             raise
     
-    def _create_chunks(self, content: str, user_id: str, document_name: str) -> List[DocumentChunk]:
+    def _create_chunks(self, content: str, user_id: str, document_name: str, language: Optional[str] = None) -> List[DocumentChunk]:
         """
         Create chunks from document content
-        
+
         Args:
             content: Document content as string
             user_id: User ID
             document_name: Document name
-            
+            language: Detected language code
+
         Returns:
             List of DocumentChunk objects
         """
         # Tokenize the content
         tokens = self.encoding.encode(content)
-        
+
         if len(tokens) <= self.chunk_size:
             # Content fits in one chunk
             chunk_text = content
@@ -126,7 +133,8 @@ class DocumentProcessor:
                 created_at=datetime.utcnow(),
                 metadata={
                     'total_tokens': len(tokens),
-                    'chunk_method': 'single_chunk'
+                    'chunk_method': 'single_chunk',
+                    'language': language
                 }
             )
             return [chunk]
@@ -158,7 +166,8 @@ class DocumentProcessor:
                     'total_tokens': len(tokens),
                     'chunk_method': 'overlapping',
                     'start_token': start_idx,
-                    'end_token': end_idx
+                    'end_token': end_idx,
+                    'language': language
                 }
             )
             chunks.append(chunk)

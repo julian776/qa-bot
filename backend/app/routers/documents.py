@@ -73,25 +73,23 @@ async def upload_document(
             temp_file_path = temp_file.name
         
         try:
-            # Process the document
+            # Process the document (returns chunks and detected language)
             logger.info(f"Processing document {file.filename} for user {user_id}")
-            chunks = await document_processor.process_file(
+            chunks, language = await document_processor.process_file(
                 temp_file_path, user_id, file.filename
             )
-            
+
             if not chunks:
                 raise HTTPException(status_code=400, detail="No content found in document")
-            
+
+            logger.info(f"Detected language: {language} for document {file.filename}")
+
             # Generate embeddings for chunks
             texts = [chunk.text_chunk for chunk in chunks]
             embeddings = embedding_service.generate_embeddings(texts)
-            
-            # Initialize vector store if needed
-            if vector_store.index is None:
-                vector_store.initialize_index(embedding_service.get_embedding_dimension())
-            
-            # Store embeddings and metadata
-            vector_store.add_embeddings(embeddings, chunks)
+
+            # Store embeddings and metadata in Qdrant
+            await vector_store.add_embeddings(embeddings, chunks)
             
             # Calculate processing time
             processing_time = time.time() - start_time

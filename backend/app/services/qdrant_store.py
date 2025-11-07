@@ -112,33 +112,44 @@ class QdrantVectorStore:
             logger.error(f"Failed to add embeddings to Qdrant: {e}")
             raise
     
-    async def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5, 
-                   similarity_threshold: float = 0.7) -> List[QueryResult]:
+    async def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5,
+                   similarity_threshold: float = 0.7, language: Optional[str] = None) -> List[QueryResult]:
         """
         Search for similar embeddings using Qdrant
-        
+
         Args:
             query_embedding: Query embedding vector
             user_id: User ID to filter results
             top_k: Number of top results to return
             similarity_threshold: Minimum similarity score threshold
-            
+            language: Optional language filter ('en' or 'es')
+
         Returns:
             List of QueryResult objects
         """
         try:
+            # Build filter conditions
+            filter_conditions = [
+                models.FieldCondition(
+                    key="user_id",
+                    match=models.MatchValue(value=user_id)
+                )
+            ]
+
+            # Add language filter if specified
+            if language:
+                filter_conditions.append(
+                    models.FieldCondition(
+                        key="metadata.language",
+                        match=models.MatchValue(value=language)
+                    )
+                )
+
             # Search in Qdrant
             search_result = self.client.search(
                 collection_name=self.collection_name,
                 query_vector=query_embedding.tolist(),
-                query_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="user_id",
-                            match=models.MatchValue(value=user_id)
-                        )
-                    ]
-                ),
+                query_filter=models.Filter(must=filter_conditions),
                 limit=top_k,
                 score_threshold=similarity_threshold
             )
