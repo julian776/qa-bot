@@ -4,6 +4,7 @@ import SidebarHistory from "./components/SidebarHistory.jsx";
 import MessageList from "./components/MessageList.jsx";
 import ChatInput from "./components/ChatInput.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
+import DocumentManager from "./components/DocumentManager.jsx";
 import { api } from "./services/api.js";
 import { useLocalStore } from "./hooks/useLocalStore.js";
 
@@ -16,6 +17,7 @@ export default function App() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
   const [files, setFiles] = useState([]);
+  const [showDocuments, setShowDocuments] = useState(false);
   const bottomRef = useRef(null);
 
   const { conversations, addConversation, messagesByConv, setMessagesForConv, appendMessage, deleteConversation } =
@@ -54,7 +56,7 @@ export default function App() {
     if (files.length > 0) {
       setUploading(true);
       try {
-        await api.uploadFiles(files);
+        await api.uploadFiles(files, id);
         const uploadMsg = {
           id: crypto.randomUUID(),
           role: "system",
@@ -109,15 +111,43 @@ export default function App() {
   }
 
   async function handleDeleteConversation(id) {
-  if (!confirm("¿Eliminar este chat? Esta acción no se puede deshacer.")) return;
+    if (!confirm("¿Eliminar este chat? Esta acción no se puede deshacer.")) return;
 
-  // si se elimina el chat activo, limpiamos la vista
-  if (id === conversationId) {
-    setConversationId(null);
-    setMessages([]);
+    try {
+      // Delete from backend
+      await api.deleteConversation(id);
+
+      // Delete from local state
+      deleteConversation(id);
+
+      // If deleting the active chat, clear the view
+      if (id === conversationId) {
+        setConversationId(null);
+        setMessages([]);
+      }
+    } catch (e) {
+      console.error("Error deleting conversation:", e);
+      setError(`Error al eliminar el chat: ${e.message}`);
+    }
   }
-  deleteConversation(id);
-}
+
+  async function handleRenameConversation(id, newTitle) {
+    try {
+      // Update in backend
+      await api.renameConversation(id, newTitle);
+
+      // Update in local state
+      const updatedConvs = conversations.map(c =>
+        c.id === id ? { ...c, title: newTitle } : c
+      );
+      // We need to update localStorage here
+      localStorage.setItem("chat.conversations", JSON.stringify(updatedConvs));
+      window.location.reload(); // Simple refresh to sync state
+    } catch (e) {
+      console.error("Error renaming conversation:", e);
+      setError(`Error al renombrar el chat: ${e.message}`);
+    }
+  }
 
 
   return (
@@ -128,6 +158,7 @@ export default function App() {
           onNew={handleNewChat}
           onOpen={openConversation}
           onDelete={handleDeleteConversation}
+          onRename={handleRenameConversation}
         />
       </aside>
 
@@ -138,6 +169,13 @@ export default function App() {
             <div>Interfaz de Chat</div>
           </div>
           <div className="actions">
+            <button
+              className="btn ghost"
+              onClick={() => setShowDocuments(!showDocuments)}
+              title="Ver documentos de la sesión"
+            >
+              📎 Documentos
+            </button>
             <ThemeToggle />
           </div>
         </div>
@@ -157,6 +195,22 @@ export default function App() {
           />
         </div>
       </section>
+
+      {showDocuments && (
+        <aside className="sidebar" style={{ borderLeft: '1px solid var(--border)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottom: '1px solid var(--border)' }}>
+            <strong>Documentos</strong>
+            <button
+              className="btn ghost"
+              onClick={() => setShowDocuments(false)}
+              style={{ padding: '4px 8px' }}
+            >
+              ✕
+            </button>
+          </div>
+          <DocumentManager conversationId={conversationId} />
+        </aside>
+      )}
     </div>
   );
 }

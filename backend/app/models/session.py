@@ -20,6 +20,8 @@ class Session(BaseModel):
     """Session model for chat sessions"""
     session_id: str
     user_id: str
+    title: Optional[str] = None  # Custom session title (default: auto-generated)
+    document_ids: List[str] = Field(default_factory=list)  # Linked document IDs
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     message_count: int = 0
@@ -31,8 +33,8 @@ class QueryWithSessionRequest(BaseModel):
     prompt: str
     session_id: str
     user_id: Optional[str] = "default_user"
-    top_k: int = 5
-    similarity_threshold: float = 0.3  # Lowered from 0.7 - OpenAI embeddings typically score 0.3-0.5 for relevant matches
+    top_k: int = 10
+    similarity_threshold: float = 0.1  # Lowered from 0.7 - OpenAI embeddings typically score 0.3-0.5 for relevant matches
     language: Optional[str] = None  # Optional language filter
 
 
@@ -63,3 +65,21 @@ class MessageListResponse(BaseModel):
     session_id: str
     messages: List[dict]
     total_messages: int
+
+
+class SessionUpdateTitleRequest(BaseModel):
+    """Request to update session title"""
+    title: str
+
+
+class SessionListResponse(BaseModel):
+    """Response with user sessions"""
+    sessions: List[dict]
+    total_sessions: int
+
+
+class SessionDocumentsResponse(BaseModel):
+    """Response with documents linked to a session"""
+    session_id: str
+    documents: List[dict]
+    total_documents: int

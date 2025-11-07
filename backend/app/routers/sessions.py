@@ -11,7 +11,8 @@ import logging
 from app.models.session import (
     QueryWithSessionRequest, QueryWithSessionResponse,
     SessionCreateRequest, SessionCreateResponse,
-    MessageListResponse, Session, Message
+    MessageListResponse, Session, Message,
+    SessionUpdateTitleRequest, SessionListResponse, SessionDocumentsResponse
 )
 from app.services.embedding_service import EmbeddingService
 from app.services.qdrant_store import QdrantVectorStore
@@ -272,6 +273,8 @@ async def get_user_sessions(user_id: str):
             sessions.append({
                 'session_id': session['session_id'],
                 'user_id': session['user_id'],
+                'title': session.get('title'),
+                'document_ids': session.get('document_ids', []),
                 'message_count': session['message_count'],
                 'created_at': session['created_at'].isoformat(),
                 'updated_at': session['updated_at'].isoformat()
@@ -288,3 +291,146 @@ async def get_user_sessions(user_id: str):
     except Exception as e:
         logger.error(f"Error retrieving sessions for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error retrieving sessions: {str(e)}")
+
+
+@router.delete("/session/{session_id}")
+async def delete_session(session_id: str):
+    """
+    Delete a session and all its messages
+
+    Args:
+        session_id: Session ID to delete
+
+    Returns:
+        Success message with deletion counts
+    """
+    try:
+        db = db_config.get_database()
+
+        # Check if session exists
+        session = await db.sessions.find_one({"session_id": session_id})
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Delete all messages for this session
+        delete_messages_result = await db.messages.delete_many({"session_id": session_id})
+
+        # Delete the session
+        delete_session_result = await db.sessions.delete_one({"session_id": session_id})
+
+        logger.info(f"Deleted session {session_id} and {delete_messages_result.deleted_count} messages")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "messages_deleted": delete_messages_result.deleted_count,
+            "session_deleted": delete_session_result.deleted_count > 0
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting session: {str(e)}")
+
+
+@router.patch("/session/{session_id}/title")
+async def update_session_title(session_id: str, request: SessionUpdateTitleRequest):
+    """
+    Update the title of a session
+
+    Args:
+        session_id: Session ID to update
+        request: Request with new title
+
+    Returns:
+        Updated session info
+    """
+    try:
+        db = db_config.get_database()
+
+        # Check if session exists
+        session = await db.sessions.find_one({"session_id": session_id})
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        # Update session title
+        result = await db.sessions.update_one(
+            {"session_id": session_id},
+            {
+                "$set": {
+                    "title": request.title,
+                    "updated_at": datetime.utcnow()
+                }
+            }
+        )
+
+        if result.modified_count == 0:
+            raise HTTPException(status_code=500, detail="Failed to update session title")
+
+        logger.info(f"Updated session {session_id} title to '{request.title}'")
+
+        return {
+            "success": True,
+            "session_id": session_id,
+            "title": request.title,
+            "updated_at": datetime.utcnow().isoformat()
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating session {session_id} title: {e}")
+        raise HTTPException(status_code=500, detail=f"Error updating session title: {str(e)}")
+
+
+@router.get("/session/{session_id}/documents", response_model=SessionDocumentsResponse)
+async def get_session_documents(session_id: str):
+    """
+    Get all documents linked to a session
+
+    Args:
+        session_id: Session ID to get documents for
+
+    Returns:
+        SessionDocumentsResponse with linked documents
+    """
+    try:
+        db = db_config.get_database()
+
+        # Get session
+        session = await db.sessions.find_one({"session_id": session_id})
+        if not session:
+            raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
+
+        document_ids = session.get('document_ids', [])
+
+        # Get documents from MongoDB
+        documents = []
+        if document_ids:
+            documents_cursor = db.documents.find({"_id": {"$in": document_ids}})
+            async for doc in documents_cursor:
+                documents.append({
+                    'id': str(doc['_id']),
+                    'filename': doc['filename'],
+                    'original_filename': doc['original_filename'],
+                    'file_type': doc['file_type'],
+                    'file_size': doc['file_size'],
+                    'status': doc['status'],
+                    'total_chunks': doc['total_chunks'],
+                    'created_at': doc['created_at'].isoformat()
+                })
+
+        logger.info(f"Retrieved {len(documents)} documents for session {session_id}")
+
+        return SessionDocumentsResponse(
+            session_id=session_id,
+            documents=documents,
+            total_documents=len(documents)
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error retrieving documents for session {session_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving documents: {str(e)}")

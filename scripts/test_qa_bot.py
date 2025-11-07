@@ -58,7 +58,7 @@ class QABotTester:
             print(f"❌ Upload error: {e}")
             return {}
     
-    def query_documents(self, query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    def query_documents(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
         """Query documents using the API"""
         try:
             payload = {

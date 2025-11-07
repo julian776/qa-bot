@@ -12,9 +12,12 @@ import logging
 from app.models.document import (
     DocumentUpload, QueryRequest, QueryResponse, QueryResult
 )
+from app.models.mongodb import Document, DocumentStatus
 from app.services.document_processor import DocumentProcessor
 from app.services.embedding_service import EmbeddingService
 from app.services.qdrant_store import QdrantVectorStore
+from app.database import db_config
+from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -37,42 +40,46 @@ def get_vector_store() -> QdrantVectorStore:
 async def upload_document(
     file: UploadFile = File(...),
     user_id: str = Form(...),
+    session_id: str = Form(None),
     embedding_service: EmbeddingService = Depends(get_embedding_service),
     vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Upload a document and process it into embeddings
-    
+
     Args:
         file: Uploaded file (supports .txt and .pdf)
         user_id: User ID for the document
+        session_id: Optional session ID to link the document to
         embedding_service: Embedding service dependency
         vector_store: Vector store dependency
-        
+
     Returns:
         DocumentUpload response with processing information
     """
     start_time = time.time()
-    
+
     try:
         # Validate file type
         if not file.filename:
             raise HTTPException(status_code=400, detail="No file provided")
-        
+
         file_extension = os.path.splitext(file.filename)[1].lower()
         if file_extension not in ['.txt', '.pdf']:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="Unsupported file type. Only .txt and .pdf files are supported."
             )
-        
+
         # Save uploaded file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_extension) as temp_file:
             content = await file.read()
             temp_file.write(content)
             temp_file_path = temp_file.name
-        
+
         try:
+            db = db_config.get_database()
+
             # Process the document (returns chunks and detected language)
             logger.info(f"Processing document {file.filename} for user {user_id}")
             chunks, language = await document_processor.process_file(
@@ -90,15 +97,42 @@ async def upload_document(
 
             # Store embeddings and metadata in Qdrant
             await vector_store.add_embeddings(embeddings, chunks)
-            
+
             # Calculate processing time
             processing_time = time.time() - start_time
-            
+
             # Get chunk statistics
             stats = document_processor.get_chunk_stats(chunks)
-            
+
+            # Save document metadata to MongoDB
+            from datetime import datetime
+            document_data = {
+                "user_id": user_id,
+                "filename": file.filename,
+                "original_filename": file.filename,
+                "file_type": file_extension,
+                "file_size": len(content),
+                "status": DocumentStatus.COMPLETED,
+                "total_chunks": len(chunks),
+                "total_tokens": stats['total_tokens'],
+                "processing_time": processing_time,
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+                "metadata": {"language": language}
+            }
+            doc_result = await db.documents.insert_one(document_data)
+            document_id = str(doc_result.inserted_id)
+
+            # If session_id provided, link document to session
+            if session_id:
+                await db.sessions.update_one(
+                    {"session_id": session_id},
+                    {"$addToSet": {"document_ids": document_id}}
+                )
+                logger.info(f"Linked document {document_id} to session {session_id}")
+
             logger.info(f"Successfully processed {file.filename} into {len(chunks)} chunks")
-            
+
             return DocumentUpload(
                 user_id=user_id,
                 document_name=file.filename,
@@ -213,32 +247,96 @@ async def get_user_documents(
         logger.error(f"Error getting documents for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error getting documents: {str(e)}")
 
+@router.delete("/document/{document_id}")
+async def delete_document(
+    document_id: str,
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
+):
+    """
+    Delete a specific document and all its chunks
+
+    Args:
+        document_id: Document ID to delete
+        vector_store: Vector store dependency
+
+    Returns:
+        Confirmation of deletion
+    """
+    try:
+        db = db_config.get_database()
+
+        # Check if document exists
+        doc = await db.documents.find_one({"_id": ObjectId(document_id)})
+        if not doc:
+            raise HTTPException(status_code=404, detail=f"Document {document_id} not found")
+
+        document_name = doc['filename']
+        user_id = doc['user_id']
+
+        # Delete from Qdrant (vectors)
+        removed_vectors = await vector_store.delete_document(document_name, user_id)
+
+        # Delete chunks from MongoDB
+        chunks_result = await db.chunks.delete_many({"document_id": document_id})
+
+        # Delete document from MongoDB
+        doc_result = await db.documents.delete_one({"_id": ObjectId(document_id)})
+
+        logger.info(f"Deleted document {document_id}: {removed_vectors} vectors, {chunks_result.deleted_count} chunks")
+
+        return {
+            "success": True,
+            "document_id": document_id,
+            "document_name": document_name,
+            "removed_vectors": removed_vectors,
+            "removed_chunks": chunks_result.deleted_count,
+            "removed_document": doc_result.deleted_count > 0
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error deleting document {document_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error deleting document: {str(e)}")
+
+
 @router.delete("/documents/{user_id}")
 async def clear_user_documents(
     user_id: str,
     vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
-    Clear all documents for a specific user
-    
+    Clear all documents for a specific user (from both Qdrant and MongoDB)
+
     Args:
         user_id: User ID to clear documents for
         vector_store: Vector store dependency
-        
+
     Returns:
         Confirmation of deletion
     """
     try:
-        removed_count = vector_store.clear_user_data(user_id)
-        
-        logger.info(f"Cleared {removed_count} vectors for user {user_id}")
-        
+        db = db_config.get_database()
+
+        # Delete from Qdrant (vectors)
+        removed_vectors = vector_store.clear_user_data(user_id)
+
+        # Delete chunks from MongoDB
+        chunks_result = await db.chunks.delete_many({"user_id": user_id})
+
+        # Delete documents from MongoDB
+        docs_result = await db.documents.delete_many({"user_id": user_id})
+
+        logger.info(f"Cleared all data for user {user_id}: {removed_vectors} vectors, {chunks_result.deleted_count} chunks, {docs_result.deleted_count} documents")
+
         return {
             "user_id": user_id,
-            "removed_vectors": removed_count,
+            "removed_vectors": removed_vectors,
+            "removed_chunks": chunks_result.deleted_count,
+            "removed_documents": docs_result.deleted_count,
             "status": "success"
         }
-    
+
     except Exception as e:
         logger.error(f"Error clearing documents for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Error clearing documents: {str(e)}")
@@ -247,8 +345,8 @@ async def clear_user_documents(
 async def search_user_documents(
     user_id: str,
     query: str,
-    top_k: int = 5,
-    similarity_threshold: float = 0.3,  # Lowered from 0.7 for better results
+    top_k: int = 10,
+    similarity_threshold: float = 0.1,  # Lowered from 0.7 for better results
     embedding_service: EmbeddingService = Depends(get_embedding_service),
     vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):

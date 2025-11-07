@@ -25,8 +25,8 @@ class QueryRequest(BaseModel):
     """Model for query request"""
     query: str
     user_id: str
-    top_k: int = 5
-    similarity_threshold: float = 0.3  # Lowered from 0.7 for better results with OpenAI embeddings
+    top_k: int = 10
+    similarity_threshold: float = 0.1  # Lowered from 0.7 for better results with OpenAI embeddings
 
 class QueryResult(BaseModel):
     """Model for query result"""

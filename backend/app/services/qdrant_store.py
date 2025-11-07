@@ -111,8 +111,8 @@ class QdrantVectorStore:
             logger.error(f"Failed to add embeddings to Qdrant: {e}")
             raise
     
-    async def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 5,
-                   similarity_threshold: float = 0.3, language: Optional[str] = None) -> List[QueryResult]:
+    async def search(self, query_embedding: np.ndarray, user_id: str, top_k: int = 10,
+                   similarity_threshold: float = 0.1, language: Optional[str] = None) -> List[QueryResult]:
         """
         Search for similar embeddings using Qdrant
 
@@ -202,13 +202,51 @@ class QdrantVectorStore:
                 'documents': []
             }
     
+    async def delete_document(self, document_name: str, user_id: str) -> int:
+        """
+        Delete all vectors for a specific document
+
+        Args:
+            document_name: Name of the document to delete
+            user_id: User ID who owns the document
+
+        Returns:
+            Number of vectors removed (0 as Qdrant doesn't return count)
+        """
+        try:
+            # Delete points matching both document_name and user_id
+            self.client.delete(
+                collection_name=self.collection_name,
+                points_selector=models.FilterSelector(
+                    filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="user_id",
+                                match=models.MatchValue(value=user_id)
+                            ),
+                            models.FieldCondition(
+                                key="document_name",
+                                match=models.MatchValue(value=document_name)
+                            )
+                        ]
+                    )
+                )
+            )
+
+            logger.info(f"Deleted document '{document_name}' for user {user_id} from Qdrant")
+            return 0  # Qdrant doesn't return count
+
+        except Exception as e:
+            logger.error(f"Failed to delete document from Qdrant: {e}")
+            raise
+
     def clear_user_data(self, user_id: str) -> int:
         """
         Clear all data for a specific user
-        
+
         Args:
             user_id: User ID to clear data for
-            
+
         Returns:
             Number of vectors removed
         """
@@ -227,10 +265,10 @@ class QdrantVectorStore:
                     )
                 )
             )
-            
+
             logger.info(f"Cleared data for user {user_id} from Qdrant")
             return 0  # Qdrant doesn't return count, so we return 0
-            
+
         except Exception as e:
             logger.error(f"Failed to clear user data from Qdrant: {e}")
             raise
