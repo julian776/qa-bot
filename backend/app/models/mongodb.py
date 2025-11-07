@@ -7,21 +7,7 @@ from datetime import datetime
 from bson import ObjectId
 from enum import Enum
 
-class PyObjectId(ObjectId):
-    """Custom ObjectId type for Pydantic"""
-    @classmethod
-    def __get_validators__(cls):
-        yield cls.validate
-
-    @classmethod
-    def validate(cls, v):
-        if not ObjectId.is_valid(v):
-            raise ValueError("Invalid objectid")
-        return ObjectId(v)
-
-    @classmethod
-    def __modify_schema__(cls, field_schema):
-        field_schema.update(type="string")
+# Removed PyObjectId - not needed for modern Pydantic v2
 
 class DocumentStatus(str, Enum):
     """Document processing status"""
@@ -32,7 +18,7 @@ class DocumentStatus(str, Enum):
 
 class Document(BaseModel):
     """Document model"""
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[str] = Field(default=None, alias="_id")
     user_id: str
     filename: str
     original_filename: str
@@ -53,8 +39,8 @@ class Document(BaseModel):
 
 class DocumentChunk(BaseModel):
     """Document chunk model"""
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
-    document_id: PyObjectId
+    id: Optional[str] = Field(default=None, alias="_id")
+    document_id: str
     user_id: str
     chunk_index: int
     text_chunk: str
@@ -70,7 +56,7 @@ class DocumentChunk(BaseModel):
 
 class Query(BaseModel):
     """Query model for storing user queries"""
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[str] = Field(default=None, alias="_id")
     user_id: str
     query_text: str
     results_count: int = 0
@@ -85,7 +71,7 @@ class Query(BaseModel):
 
 class User(BaseModel):
     """User model"""
-    id: Optional[PyObjectId] = Field(default_factory=PyObjectId, alias="_id")
+    id: Optional[str] = Field(default=None, alias="_id")
     user_id: str = Field(unique=True)
     username: str
     email: Optional[str] = None

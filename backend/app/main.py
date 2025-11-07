@@ -20,7 +20,11 @@ app = FastAPI(
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # React dev server
+    allow_origins=[
+        "http://localhost:3000",
+        "http://0.0.0.0:3000",
+        "http://127.0.0.1:3000"
+    ],  # React dev server
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -46,15 +50,24 @@ async def startup_event():
         vector_store = QdrantVectorStore()
         llm_service = LLMService()
 
-        # Test connections
-        if not await embedding_service.test_connection():
-            raise Exception("OpenAI API connection failed")
+        # Test connections (warning only, don't fail on startup)
+        try:
+            if not await embedding_service.test_connection():
+                logger.warning("OpenAI API connection test failed - check your API key")
+        except Exception as e:
+            logger.warning(f"OpenAI API connection test error: {e}")
 
-        if not vector_store.test_connection():
-            raise Exception("Qdrant connection failed")
+        try:
+            if not vector_store.test_connection():
+                logger.warning("Qdrant connection test failed")
+        except Exception as e:
+            logger.warning(f"Qdrant connection test error: {e}")
 
-        if not llm_service.test_connection():
-            raise Exception("LLM service connection failed")
+        try:
+            if not llm_service.test_connection():
+                logger.warning("LLM service connection test failed")
+        except Exception as e:
+            logger.warning(f"LLM connection test error: {e}")
 
         # Make services available to routers
         app.embedding_service = embedding_service
@@ -101,7 +114,7 @@ async def root():
 async def health_check():
     if not vector_store:
         return {"status": "unhealthy", "error": "Services not initialized"}
-    
+
     stats = vector_store.get_stats()
     return {
         "status": "healthy",
@@ -112,6 +125,22 @@ async def health_check():
         },
         "mongodb": {
             "connected": db_config.client is not None
+        }
+    }
+
+@app.get("/api/health")
+async def api_health_check():
+    """Health check endpoint for frontend"""
+    if not vector_store:
+        return {"status": "unhealthy", "error": "Services not initialized"}
+
+    return {
+        "status": "ok",
+        "services": {
+            "mongodb": db_config.client is not None,
+            "qdrant": vector_store is not None,
+            "embeddings": embedding_service is not None,
+            "llm": llm_service is not None
         }
     }
 

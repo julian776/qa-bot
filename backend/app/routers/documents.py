@@ -14,7 +14,7 @@ from app.models.document import (
 )
 from app.services.document_processor import DocumentProcessor
 from app.services.embedding_service import EmbeddingService
-from app.services.vector_store import VectorStore
+from app.services.qdrant_store import QdrantVectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +28,7 @@ def get_embedding_service() -> EmbeddingService:
     from app.main import app
     return app.embedding_service
 
-def get_vector_store() -> VectorStore:
+def get_vector_store() -> QdrantVectorStore:
     """Dependency to get vector store"""
     from app.main import app
     return app.vector_store
@@ -38,7 +38,7 @@ async def upload_document(
     file: UploadFile = File(...),
     user_id: str = Form(...),
     embedding_service: EmbeddingService = Depends(get_embedding_service),
-    vector_store: VectorStore = Depends(get_vector_store)
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Upload a document and process it into embeddings
@@ -123,7 +123,7 @@ async def upload_document(
 async def query_documents(
     request: QueryRequest,
     embedding_service: EmbeddingService = Depends(get_embedding_service),
-    vector_store: VectorStore = Depends(get_vector_store)
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Query documents using semantic search
@@ -175,7 +175,7 @@ async def query_documents(
 @router.get("/documents/{user_id}")
 async def get_user_documents(
     user_id: str,
-    vector_store: VectorStore = Depends(get_vector_store)
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Get all documents for a specific user
@@ -216,7 +216,7 @@ async def get_user_documents(
 @router.delete("/documents/{user_id}")
 async def clear_user_documents(
     user_id: str,
-    vector_store: VectorStore = Depends(get_vector_store)
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Clear all documents for a specific user
@@ -250,7 +250,7 @@ async def search_user_documents(
     top_k: int = 5,
     similarity_threshold: float = 0.7,
     embedding_service: EmbeddingService = Depends(get_embedding_service),
-    vector_store: VectorStore = Depends(get_vector_store)
+    vector_store: QdrantVectorStore = Depends(get_vector_store)
 ):
     """
     Search documents for a specific user (GET endpoint for easy testing)

@@ -71,7 +71,7 @@ async def create_session(request: SessionCreateRequest):
 
         # Insert into MongoDB
         db = db_config.get_database()
-        await db.sessions.insert_one(session.dict(by_alias=True, exclude={'id'}))
+        await db.sessions.insert_one(session.model_dump())
 
         logger.info(f"Created session {session_id} for user {request.user_id}")
 
@@ -165,7 +165,7 @@ async def query_with_llm(
             language=language,
             created_at=datetime.utcnow()
         )
-        await db.messages.insert_one(user_message.dict(by_alias=True, exclude={'id'}))
+        await db.messages.insert_one(user_message.model_dump())
 
         # Save assistant message to MongoDB
         assistant_message = Message(
@@ -176,7 +176,7 @@ async def query_with_llm(
             sources=sources,
             created_at=datetime.utcnow()
         )
-        await db.messages.insert_one(assistant_message.dict(by_alias=True, exclude={'id'}))
+        await db.messages.insert_one(assistant_message.model_dump())
 
         # Update session message count and updated_at
         await db.sessions.update_one(
