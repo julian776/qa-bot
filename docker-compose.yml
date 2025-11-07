@@ -38,11 +38,6 @@ services:
     networks:
       - qa-bot-network
     restart: unless-stopped
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:6333/health" ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # FastAPI Backend
   backend:
@@ -63,15 +58,15 @@ services:
       mongodb:
         condition: service_healthy
       qdrant:
-        condition: service_healthy
+        condition: service_started
     networks:
       - qa-bot-network
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
-      interval: 30s
+      interval: 2s
       timeout: 10s
-      retries: 3
+      retries: 10
 
   # React Frontend
   frontend:

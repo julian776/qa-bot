@@ -39,7 +39,7 @@ export default function App() {
     addConversation({ conversationId: id, title: "Nuevo chat" });
     setMessagesForConv(id, []);
     return id;
-    }
+  }
 
   async function handleSend(text) {
     if (!text.trim() || !canSend || uploading) return;
