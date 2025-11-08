@@ -1,7 +1,88 @@
 export const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 export const USE_MOCK = false; // Connected to real backend
 
+// Helper to get auth headers
+function getAuthHeaders() {
+  const token = localStorage.getItem('auth_token');
+  return {
+    'Content-Type': 'application/json',
+    ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+  };
+}
+
 export const api = {
+  // ========== AUTH ENDPOINTS ==========
+  async register(email, username, password, fullName) {
+    const res = await fetch(`${API_BASE}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        username,
+        password,
+        full_name: fullName || null
+      })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Registration failed');
+    }
+    return await res.json();
+  },
+
+  async login(email, password) {
+    const res = await fetch(`${API_BASE}/api/auth/login/json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Login failed');
+    }
+    return await res.json();
+  },
+
+  async getCurrentUser() {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      headers: getAuthHeaders()
+    });
+    if (!res.ok) {
+      throw new Error('Failed to get user info');
+    }
+    return await res.json();
+  },
+
+  async updateProfile(updates) {
+    const res = await fetch(`${API_BASE}/api/auth/me`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(updates)
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Profile update failed');
+    }
+    return await res.json();
+  },
+
+  async changePassword(currentPassword, newPassword) {
+    const res = await fetch(`${API_BASE}/api/auth/change-password`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword
+      })
+    });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.detail || 'Password change failed');
+    }
+    return await res.json();
+  },
+
+  // ========== EXISTING ENDPOINTS ==========
   async send({ conversationId, message, files }) {
     if (USE_MOCK) return mockSendMessage({ conversationId, message, files });
 

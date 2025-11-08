@@ -5,12 +5,15 @@ import MessageList from "./components/MessageList.jsx";
 import ChatInput from "./components/ChatInput.jsx";
 import ThemeToggle from "./components/ThemeToggle.jsx";
 import DocumentManager from "./components/DocumentManager.jsx";
+import UserProfile from "./components/UserProfile.jsx";
+import AuthPage from "./pages/AuthPage.jsx";
 import { api } from "./services/api.js";
 import { useLocalStore } from "./hooks/useLocalStore.js";
-
+import { useAuth } from "./contexts/AuthContext.jsx";
 
 
 export default function App() {
+  const { user, loading: authLoading } = useAuth();
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([]);
   const [sending, setSending] = useState(false);
@@ -18,7 +21,27 @@ export default function App() {
   const [error, setError] = useState(null);
   const [files, setFiles] = useState([]);
   const [showDocuments, setShowDocuments] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
   const bottomRef = useRef(null);
+
+  console.log('App render - authLoading:', authLoading, 'user:', user);
+
+  // Show auth page if not logged in
+  if (authLoading) {
+    console.log('App: Showing loading screen');
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div>Cargando...</div>
+      </div>
+    );
+  }
+
+  if (!user) {
+    console.log('App: No user, showing auth page');
+    return <AuthPage />;
+  }
+
+  console.log('App: User authenticated, showing main app');
 
   const { conversations, addConversation, messagesByConv, setMessagesForConv, appendMessage, deleteConversation } =
     useLocalStore();
@@ -176,6 +199,13 @@ export default function App() {
             >
               📎 Documentos
             </button>
+            <button
+              className="btn ghost"
+              onClick={() => setShowProfile(true)}
+              title="Mi perfil"
+            >
+              👤 {user?.username}
+            </button>
             <ThemeToggle />
           </div>
         </div>
@@ -210,6 +240,10 @@ export default function App() {
           </div>
           <DocumentManager conversationId={conversationId} />
         </aside>
+      )}
+
+      {showProfile && (
+        <UserProfile onClose={() => setShowProfile(false)} />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import api, documents, sessions, admin
+from app.routers import api, documents, sessions, admin, auth
 from app.services.embedding_service import EmbeddingService
 from app.services.qdrant_store import QdrantVectorStore
 from app.services.llm_service import LLMService
@@ -22,9 +22,11 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
+        "http://localhost:5173",  # Vite dev server
         "http://0.0.0.0:3000",
-        "http://127.0.0.1:3000"
-    ],  # React dev server
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -88,6 +90,7 @@ async def shutdown_event():
         await db_config.disconnect()
 
 # Include routers
+app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(api.router, prefix="/api", tags=["legacy"])
 app.include_router(documents.router, prefix="/api", tags=["documents"])
 app.include_router(sessions.router, prefix="/api", tags=["sessions"])
